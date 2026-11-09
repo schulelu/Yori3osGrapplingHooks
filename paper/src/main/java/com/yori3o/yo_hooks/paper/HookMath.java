@@ -10,6 +10,17 @@ public final class HookMath {
     /** Shortest rope; the mod clamps every length change to this. */
     public static final double MIN_LENGTH = 0.4;
 
+    // Range catch (not in the mod): a hook that reaches the end of its rope drops on it instead of breaking.
+    /** The rope catches the hook this far inside the range, so a hook that just attached isn't on the break line. */
+    public static final double CATCH_MARGIN = 0.5;
+    /** Gravity and drag of a caught hook; the mod's (and the free flight's) are 0.03 and 0.99. */
+    public static final double CATCH_GRAVITY = 0.08;
+    public static final double CATCH_DRAG = 0.98;
+    /** Ticks a caught hook may swing before it is pulled back. */
+    public static final int CATCH_TICKS = 40;
+    /** A caught hook that lands closer than this to the eyes (a throw straight up) is pulled back. */
+    public static final double CATCH_MIN_ATTACH = 3.0;
+
     private HookMath() {
     }
 
@@ -44,6 +55,27 @@ public final class HookMath {
 
     /** Velocity after the rope step; {@code taut} when the player was beyond the rope length. */
     public record Rope(V velocity, boolean taut, double distance, V towardHook) {
+    }
+
+    /** A flying hook's next position and velocity; {@code taut} when the rope stopped it. */
+    public record Catch(V position, V velocity, boolean taut) {
+    }
+
+    /**
+     * One flight step of a hook on a rope of the given radius around {@code center}: inside, the hook flies on;
+     * a step past the end is clamped onto the sphere and loses its outward speed, keeping the rest, so the
+     * hook swings down on the tight rope.
+     */
+    public static Catch catchStep(V pos, V vel, V center, double radius) {
+        V next = pos.add(vel);
+        V off = next.sub(center);
+        double d = off.length();
+        if (d <= radius || d < 1e-9) {
+            return new Catch(next, vel, false);
+        }
+        V u = off.mul(1 / d);
+        double out = vel.dot(u);
+        return new Catch(center.add(u.mul(radius)), out > 0 ? vel.sub(u.mul(out)) : vel, true);
     }
 
     /**

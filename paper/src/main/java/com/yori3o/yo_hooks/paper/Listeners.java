@@ -16,14 +16,15 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.enchantment.EnchantItemEvent;
 import org.bukkit.event.enchantment.PrepareItemEnchantEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.FurnaceBurnEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareSmithingEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -82,11 +83,18 @@ final class Listeners implements Listener {
         hooks().scroll(e.getPlayer(), wheelUp);
     }
 
-    @EventHandler
-    void onKick(PlayerKickEvent e) {
-        // Hanging still is "floating" to the anti-fly check; the mod suppresses it the same way while hooked
-        if (e.getCause() == PlayerKickEvent.Cause.FLYING_PLAYER && hooks().forgiveFlyKick(e.getPlayer())) {
-            e.setCancelled(true);
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    void onHit(EntityDamageByEntityEvent e) {
+        // Before the knockback is applied: a hit swings a seated player on the rope
+        if (e.getEntity() instanceof Player p) {
+            hooks().knockOffSeat(p);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    void onFuel(FurnaceBurnEvent e) {
+        if (HookItems.isHook(e.getFuel())) {
+            e.setCancelled(true); // a fishing rod underneath, but the mod's hooks don't burn
         }
     }
 

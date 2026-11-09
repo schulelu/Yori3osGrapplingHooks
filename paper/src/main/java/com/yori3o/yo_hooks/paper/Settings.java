@@ -10,6 +10,7 @@ import org.bukkit.Input;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.jetbrains.annotations.Nullable;
 
 /** config.yml, read once on enable and on /yohooks reload. Names and defaults follow the mod's config files. */
 public final class Settings {
@@ -30,6 +31,25 @@ public final class Settings {
                 case NONE -> false;
             };
         }
+
+        /** The client key binding behind this input, so hints show each player's own key. */
+        public @Nullable String keybind() {
+            return switch (this) {
+                case FORWARD -> "key.forward";
+                case BACKWARD -> "key.back";
+                case LEFT -> "key.left";
+                case RIGHT -> "key.right";
+                case JUMP -> "key.jump";
+                case SNEAK -> "key.sneak";
+                case SPRINT -> "key.sprint";
+                case NONE -> null;
+            };
+        }
+
+        /** Whether this is one of the four movement keys. */
+        public boolean movement() {
+            return this == FORWARD || this == BACKWARD || this == LEFT || this == RIGHT;
+        }
     }
 
     public final double climbSpeed;
@@ -44,7 +64,11 @@ public final class Settings {
     public final Control climbUp;
     public final Control climbDown;
     public final Control jumpOff;
+    public final Control letGo;
     public final boolean scrollToClimb;
+    public final boolean rangeCatch;
+    public final boolean seatWhenStill;
+    public final boolean actionBar;
     public final boolean packEnabled;
     public final String packUrl;
     public final String packSha1;
@@ -81,7 +105,17 @@ public final class Settings {
         climbUp = control(c, "controls.climb-up", Control.FORWARD, log);
         climbDown = control(c, "controls.climb-down", Control.BACKWARD, log);
         jumpOff = control(c, "controls.jump-off", Control.JUMP, log);
+        Control letGoKey = control(c, "controls.let-go", Control.SNEAK, log);
+        if (letGoKey != Control.NONE && (letGoKey == climbUp || letGoKey == climbDown || letGoKey == jumpOff)) {
+            log.warning("controls.let-go: " + letGoKey.name().toLowerCase(Locale.ROOT)
+                + " is already a rope control; letting go is off");
+            letGoKey = Control.NONE;
+        }
+        letGo = letGoKey;
         scrollToClimb = c.getBoolean("controls.scroll-to-climb", false);
+        rangeCatch = c.getBoolean("range-catch", true);
+        seatWhenStill = c.getBoolean("seat-when-still", true);
+        actionBar = c.getBoolean("action-bar", true);
         packEnabled = c.getBoolean("resource-pack.enabled", true);
         packUrl = c.getString("resource-pack.url", "").trim();
         packSha1 = c.getString("resource-pack.sha1", "").trim().toLowerCase(Locale.ROOT);

@@ -1,6 +1,7 @@
 package com.yori3o.yo_hooks.paper;
 
 import com.yori3o.yo_hooks.paper.HookMath.V;
+import com.yori3o.yo_hooks.paper.Settings.Control;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,7 @@ import net.kyori.adventure.sound.Sound;
 import org.bukkit.Bukkit;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
+import org.bukkit.Input;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.SoundCategory;
@@ -36,7 +38,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Runs every hook every tick: flight, attaching, the rope physics and the controls. In the mod the player's client
  * moves the player along the rope; here the server computes the mod's formula and sends the result as the
- * player's velocity whenever the rope is taut.
+ * player's velocity whenever the rope is taut. A player who hangs still is held on a {@link Seat} instead.
  */
 final class HookManager implements Runnable {
 
@@ -51,12 +53,17 @@ final class HookManager implements Runnable {
         SILENT
     }
 
-    /** Ticks after a hook ends in which a "flying is not enabled" kick is still forgiven. */
-    private static final long KICK_GRACE = 60;
+    /** With range catch, a flying hook only breaks this far past its range (a teleport or an ender pearl). */
+    private static final double CATCH_BREAK_SLACK = 4;
+    /** Ticks of hanging still before the seat holds the player. */
+    private static final int SEAT_DELAY = 10;
+    /** Ticks after leaving the seat before it holds the player again. */
+    private static final int SEAT_COOLDOWN = 20;
+    /** Speed toward a pressed movement key that ends the seat, to start the swing. */
+    private static final double SEAT_PUSH = 0.1;
 
     private final YoHooks plugin;
     private final Map<UUID, Hook> hooks = new HashMap<>();
-    private final Map<UUID, Long> kickGrace = new HashMap<>();
     private long tick;
 
     HookManager(YoHooks plugin) {
@@ -65,11 +72,6 @@ final class HookManager implements Runnable {
 
     @Nullable Hook of(Player p) {
         return hooks.get(p.getUniqueId());
-    }
-
-    boolean forgiveFlyKick(Player p) {
-        Long until = kickGrace.get(p.getUniqueId());
-        return hooks.containsKey(p.getUniqueId()) || (until != null && until >= tick);
     }
 
     /** Right-click with a hook: cast it, or pull the current one back. */
@@ -106,6 +108,7 @@ final class HookManager implements Runnable {
         h.vy = v.getY();
         h.vz = v.getZ();
         h.lastJump = cfg.jumpOff.held(p.getCurrentInput());
+        h.lastLetGo = cfg.letGo.held(p.getCurrentInput());
         hooks.put(p.getUniqueId(), h);
         plugin.sounds().play(p.getLocation().add(0, 1, 0), Sounds.Kind.CAST, Sound.Source.PLAYER, 0.7f, 1f);
     }
@@ -116,12 +119,18 @@ final class HookManager implements Runnable {
         }
         hooks.remove(h.owner);
         h.rope.remove();
-        kickGrace.put(h.owner, tick + KICK_GRACE);
         Player p = Bukkit.getPlayer(h.owner);
+        if (h.seat != null) {
+            h.seat.dismount(p);
+            h.seat = null;
+        }
         if (p == null) {
             return;
         }
         clear(p, h.id);
+        if (h.hudKey != null) {
+            RopeHud.clear(p);
+        }
         Location at = p.getLocation().add(0, 1, 0);
         switch (end) {
             case RETRACT, JUMP -> plugin.sounds().play(at, Sounds.Kind.BACK, Sound.Source.PLAYER, 1f, 1f);
@@ -175,20 +184,32 @@ final class HookManager implements Runnable {
         }
     }
 
+    /** Getting hit while seated drops the player back into the swing, so the knockback moves them. */
+    void knockOffSeat(Player p) {
+        Hook h = hooks.get(p.getUniqueId());
+        if (h != null && h.seat != null) {
+            unseat(p, h, null);
+        }
+    }
+
     @Override
     public void run() {
         tick++;
-        kickGrace.values().removeIf(until -> until < tick);
+        Settings cfg = plugin.settings();
         for (Hook h : List.copyOf(hooks.values())) {
             Player p = Bukkit.getPlayer(h.owner);
             if (p == null || !p.isValid() || p.isDead() || p.getWorld() != h.world || handOf(p, h.id) == null) {
                 discard(h, End.SILENT);
                 continue;
             }
-            if (h.location().distance(p.getLocation()) > h.maxRange) {
+            // A flying hook on a rope is held at the range by fly(); only a far jump of the player breaks it
+            double slack = !h.attached && cfg.rangeCatch ? CATCH_BREAK_SLACK : 0;
+            if (h.location().distance(p.getLocation()) > h.maxRange + slack) {
                 discard(h, End.BREAK);
                 continue;
             }
+            // The mod's ServerGamePacketListenerImplMixin: hanging on a rope isn't flying, so no "floating" kick
+            p.resetFlyingTicks();
             if (ThreadLocalRandom.current().nextDouble() > 0.9955) {
                 plugin.sounds().play(h.location(), Sounds.Kind.AMBIENT, Sound.Source.AMBIENT, 1f, 1f);
             }
@@ -199,6 +220,9 @@ final class HookManager implements Runnable {
             }
             if (hooks.get(h.owner) == h) {
                 h.rope.stretch(h.location(), p.getEyeLocation());
+                if (cfg.actionBar) {
+                    RopeHud.show(p, h, cfg, tick);
+                }
             }
         }
     }
@@ -206,13 +230,26 @@ final class HookManager implements Runnable {
     // --- flight (the mod's HookEntity as a vanilla throwable: gravity 0.03, drag 0.99 or 0.8 in water) ---
 
     private void fly(Player p, Hook h) {
+        Settings cfg = plugin.settings();
         World w = h.world;
+        V pos = h.position();
+        V vel = new V(h.vx, h.vy, h.vz);
+        V next = pos.add(vel);
+        if (cfg.rangeCatch) {
+            // Range catch: at the end of the rope the hook stops going outward and swings down on it
+            Location feet = p.getLocation();
+            HookMath.Catch c = HookMath.catchStep(pos, vel, new V(feet.getX(), feet.getY(), feet.getZ()),
+                h.maxRange - HookMath.CATCH_MARGIN);
+            next = c.position();
+            vel = c.velocity();
+            h.caught |= c.taut();
+        }
         Location from = h.location();
-        Vector vel = new Vector(h.vx, h.vy, h.vz);
-        double len = vel.length();
+        V step = next.sub(pos);
+        double len = step.length();
         boolean hitEntity = false;
         if (len > 1e-6) {
-            Vector dir = vel.clone().multiply(1 / len);
+            Vector dir = new Vector(step.x(), step.y(), step.z()).multiply(1 / len);
             RayTraceResult block = w.rayTraceBlocks(from, dir, len, FluidCollisionMode.NEVER, true);
             double reach = block == null ? len : block.getHitPosition().distance(from.toVector());
             RayTraceResult entity = w.rayTraceEntities(from, dir, reach, 0.125, e -> canHit(p, h, e));
@@ -221,19 +258,26 @@ final class HookManager implements Runnable {
                 hitEntity = true;
             }
             if (block != null && block.getHitBlock() != null) {
+                if (h.caught && block.getHitPosition().distance(p.getEyeLocation().toVector()) < HookMath.CATCH_MIN_ATTACH) {
+                    discard(h, End.RETRACT); // thrown up, fell back: no anchor at the player's own feet
+                    return;
+                }
                 hitBlock(p, h, block.getHitBlock(), block.getHitPosition());
                 return;
             }
         }
-        h.x += h.vx;
-        h.y += h.vy;
-        h.z += h.vz;
-        double drag = inWater(w.getBlockAt(h.location())) ? 0.8 : 0.99;
+        h.x = next.x();
+        h.y = next.y();
+        h.z = next.z();
+        double drag = inWater(w.getBlockAt(h.location())) ? 0.8 : h.caught ? HookMath.CATCH_DRAG : 0.99;
         double keep = (hitEntity ? 0.25 : 1) * drag;
-        h.vx *= keep;
-        h.vy = h.vy * keep - 0.03;
-        h.vz *= keep;
+        h.vx = vel.x() * keep;
+        h.vy = vel.y() * keep - (h.caught ? HookMath.CATCH_GRAVITY : 0.03);
+        h.vz = vel.z() * keep;
         h.rope.moveTo(h.location());
+        if (h.caught && ++h.caughtTicks > HookMath.CATCH_TICKS) {
+            discard(h, End.RETRACT); // swung on the rope without finding anything
+        }
     }
 
     private static boolean inWater(Block b) {
@@ -331,8 +375,26 @@ final class HookManager implements Runnable {
         Location now = p.getLocation();
         V moved = new V(now.getX() - h.lastPos.getX(), now.getY() - h.lastPos.getY(), now.getZ() - h.lastPos.getZ());
         h.lastPos = now.clone();
+        if (h.seatCooldown > 0) {
+            h.seatCooldown--;
+        }
+        if (h.seat != null && !h.seat.holds(p)) { // dismounted by vanilla, a teleport or another plugin
+            h.seat.dismount(null);
+            h.seat = null;
+            h.stillTicks = 0;
+            h.seatCooldown = SEAT_COOLDOWN;
+        }
+        boolean seated = h.seat != null;
+        boolean onGround = !seated && clientOnGround(p);
+        boolean otherVehicle = !seated && p.isInsideVehicle();
 
-        var input = p.getCurrentInput();
+        Input input = p.getCurrentInput();
+        boolean letGo = cfg.letGo.held(input);
+        if (letGo && !h.lastLetGo && !onGround && !otherVehicle) {
+            discard(h, End.RETRACT); // let go of the rope: no boost, no hunger
+            return;
+        }
+        h.lastLetGo = letGo;
         boolean jump = cfg.jumpOff.held(input);
         if (jump && !h.lastJump) {
             jumpOff(p, h, moved);
@@ -345,33 +407,30 @@ final class HookManager implements Runnable {
         if (h.scrollClimb != 0) {
             h.scrollClimb -= Integer.signum(h.scrollClimb);
         }
+        if (h.climbSoundCooldown > 0) {
+            h.climbSoundCooldown--;
+        }
         double step = HookMath.climbStep(cfg.climbSpeed, h.agility, cfg.funnyMode);
+        if (seated) {
+            sit(p, h, input, up, down, step);
+            return;
+        }
         boolean climbing = false;
         if (up) {
             double l = HookMath.climbUp(h.length, step);
             if (l < h.length) {
                 h.length = l;
                 climbing = true;
-                if (!cfg.funnyMode) {
-                    exhaust(p, HookMath.climbExhaustion(cfg.decreaseSatiety, h.agility));
-                }
-                if (h.climbSoundCooldown <= 0) {
-                    plugin.sounds().play(p.getLocation(), Sounds.Kind.CLIMB, Sound.Source.PLAYER, 0.21f, 1f);
-                    h.climbSoundCooldown = 39;
-                }
+                climbed(p, h);
             }
         } else if (down) {
             h.length = Math.max(h.length, HookMath.climbDown(h.length, cfg.climbSpeed, h.maxRange));
         }
-        if (h.climbSoundCooldown > 0) {
-            h.climbSoundCooldown--;
-        }
-        if (p.isInsideVehicle()) {
+        if (otherVehicle) {
             return;
         }
         Location eyeLoc = p.getEyeLocation();
         V eye = new V(eyeLoc.getX(), eyeLoc.getY(), eyeLoc.getZ());
-        boolean onGround = clientOnGround(p);
         HookMath.Rope r = HookMath.ropeStep(eye, h.position(), HookMath.headVelocity(moved, onGround), h.length,
             climbing, cfg.softHook, cfg.stiffness, step, onGround, p.isGliding());
         if (r.taut()) {
@@ -380,10 +439,125 @@ final class HookManager implements Runnable {
         if (cfg.funnyMode || (!onGround && r.distance() + 0.6 > h.length && r.towardHook().y() > -0.15)) {
             p.setFallDistance(0);
         }
+        if (cfg.seatWhenStill) {
+            considerSeat(p, h, input, moved, r, onGround || up || down);
+        }
+    }
+
+    /** Climbing up costs hunger and plays the climb sound at most every 39 ticks, like the mod's ServerReceiver. */
+    private void climbed(Player p, Hook h) {
+        Settings cfg = plugin.settings();
+        if (!cfg.funnyMode) {
+            exhaust(p, HookMath.climbExhaustion(cfg.decreaseSatiety, h.agility));
+        }
+        if (h.climbSoundCooldown <= 0) {
+            plugin.sounds().play(p.getLocation(), Sounds.Kind.CLIMB, Sound.Source.PLAYER, 0.21f, 1f);
+            h.climbSoundCooldown = 39;
+        }
+    }
+
+    // --- the seat (not in the mod): hanging still is held by the server, so nothing bobs ---
+
+    /** Seat a player who has hung still on the tight rope for {@link #SEAT_DELAY} ticks. */
+    private void considerSeat(Player p, Hook h, Input in, V moved, HookMath.Rope r, boolean busy) {
+        // The vertical limit is loose on purpose: the up-and-down bob is what the seat removes
+        boolean still = !busy && !p.isGliding() && !p.isFlying() && !p.isInWater() && !p.isClimbing()
+            && !in.isForward() && !in.isBackward() && !in.isLeft() && !in.isRight() && !in.isJump() && !in.isSneak()
+            && Math.hypot(moved.x(), moved.z()) < 0.05 && Math.abs(moved.y()) < 0.3
+            && r.distance() > h.length - 0.3 && r.towardHook().y() > 0;
+        h.stillTicks = still ? h.stillTicks + 1 : 0;
+        if (h.stillTicks < SEAT_DELAY || h.seatCooldown > 0) {
+            return;
+        }
+        h.stillTicks = 0;
+        Seat seat = Seat.mount(p);
+        if (seat == null) {
+            h.seatCooldown = SEAT_COOLDOWN * 5; // refused; don't retry every tick
+            return;
+        }
+        h.seat = seat;
+        h.length = Math.max(HookMath.MIN_LENGTH, r.distance());
+        p.setFallDistance(0);
+    }
+
+    /** One tick on the seat: climbing moves it along the rope, other keys put the player back into the swing. */
+    private void sit(Player p, Hook h, Input in, boolean up, boolean down, double step) {
+        Settings cfg = plugin.settings();
+        if (in.isSneak()) { // vanilla's sneak dismount would drop the player at the seat's height; leave cleanly
+            unseat(p, h, null);
+            return;
+        }
+        Vector push = swingPush(p, in, cfg);
+        if (push != null) {
+            unseat(p, h, push);
+            return;
+        }
+        p.setFallDistance(0);
+        if (!up && !down) {
+            return;
+        }
+        Location eyeLoc = p.getEyeLocation();
+        V toHook = h.position().sub(new V(eyeLoc.getX(), eyeLoc.getY(), eyeLoc.getZ()));
+        double dist = toHook.length();
+        if (dist < 1e-6) {
+            return;
+        }
+        double l = up ? HookMath.climbUp(h.length, step)
+            : Math.max(h.length, HookMath.climbDown(h.length, cfg.climbSpeed, h.maxRange));
+        if (l == h.length) {
+            return; // at the top, or as long as the range allows
+        }
+        V d = toHook.mul((dist - l) / dist); // moves the eyes to exactly l from the hook
+        Vector delta = new Vector(d.x(), d.y(), d.z());
+        if (p.getWorld().hasCollisionsIn(p.getBoundingBox().shift(delta).expand(-1e-3))) {
+            if (down) {
+                unseat(p, h, null); // reached the ground
+            }
+            return; // going up: something is in the way
+        }
+        h.length = l;
+        h.seat.move(delta);
+        if (up) {
+            climbed(p, h);
+        }
+    }
+
+    /** A pressed movement key that isn't a rope control starts a swing toward it; null if there is none. */
+    private static @Nullable Vector swingPush(Player p, Input in, Settings cfg) {
+        double forward = (pushes(Control.FORWARD, in.isForward(), cfg) ? 1 : 0) - (pushes(Control.BACKWARD, in.isBackward(), cfg) ? 1 : 0);
+        double left = (pushes(Control.LEFT, in.isLeft(), cfg) ? 1 : 0) - (pushes(Control.RIGHT, in.isRight(), cfg) ? 1 : 0);
+        if (forward == 0 && left == 0) {
+            return null;
+        }
+        // Vanilla's moveRelative: forward is (-sin yaw, cos yaw), left is (cos yaw, sin yaw)
+        double yaw = Math.toRadians(p.getLocation().getYaw());
+        double x = -Math.sin(yaw) * forward + Math.cos(yaw) * left;
+        double z = Math.cos(yaw) * forward + Math.sin(yaw) * left;
+        double n = Math.hypot(x, z);
+        return new Vector(x / n * SEAT_PUSH, 0, z / n * SEAT_PUSH);
+    }
+
+    private static boolean pushes(Control key, boolean held, Settings cfg) {
+        return held && key != cfg.climbUp && key != cfg.climbDown && key != cfg.jumpOff && key != cfg.letGo;
+    }
+
+    private void unseat(Player p, Hook h, @Nullable Vector push) {
+        if (h.seat == null) {
+            return;
+        }
+        h.seat.dismount(p);
+        h.seat = null;
+        h.stillTicks = 0;
+        h.seatCooldown = SEAT_COOLDOWN;
+        h.lastPos = p.getLocation().clone();
+        if (push != null) {
+            p.setVelocity(push);
+        }
     }
 
     private void jumpOff(Player p, Hook h, V moved) {
         Settings cfg = plugin.settings();
+        unseat(p, h, null);
         Location eyeLoc = p.getEyeLocation();
         V eye = new V(eyeLoc.getX(), eyeLoc.getY(), eyeLoc.getZ());
         if (HookMath.jumpAllowed(eye, h.position(), cfg.funnyMode)) {

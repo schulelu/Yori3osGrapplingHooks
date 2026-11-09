@@ -98,6 +98,50 @@ class HookMathTest {
     }
 
     @Test
+    void hookFliesFreelyInsideTheRope() {
+        V pos = new V(3, 1, 0);
+        V vel = new V(2, -0.1, 0);
+        HookMath.Catch c = HookMath.catchStep(pos, vel, V.ZERO, 9.5);
+        assertFalse(c.taut());
+        assertEquals(5, c.position().x(), EPS);
+        assertEquals(0.9, c.position().y(), EPS);
+        assertEquals(vel, c.velocity());
+    }
+
+    @Test
+    void ropeCatchesTheHookAtItsEnd() {
+        // Thrown straight out along +x: the step past the end lands exactly on the sphere and stops dead
+        HookMath.Catch c = HookMath.catchStep(new V(8.5, 0, 0), new V(2, 0, 0), V.ZERO, 9.5);
+        assertTrue(c.taut());
+        assertEquals(9.5, c.position().length(), EPS);
+        assertEquals(9.5, c.position().x(), EPS);
+        assertEquals(0, c.velocity().length(), EPS);
+    }
+
+    @Test
+    void caughtHookKeepsItsSwing() {
+        // On the sphere, moving down and outward: the outward part goes, the downward swing stays
+        V pos = new V(9.5, 0, 0);
+        HookMath.Catch c = HookMath.catchStep(pos, new V(0.3, -0.5, 0.2), V.ZERO, 9.5);
+        assertTrue(c.taut());
+        assertEquals(9.5, c.position().length(), EPS);
+        V u = c.position().normalize();
+        assertEquals(0, c.velocity().dot(u), EPS); // no outward speed left
+        // u = (9.8, -0.5, 0.2) / |..|; the tangential part of (0.3, -0.5, 0.2) is nearly all of y and z
+        assertEquals(-0.4832, c.velocity().y(), 1e-3);
+        assertEquals(0.1933, c.velocity().z(), 1e-3);
+    }
+
+    @Test
+    void ropeDoesNotPullAnInwardHook() {
+        // Falling back toward the player after a steep throw: the slack rope changes nothing
+        V vel = new V(-0.2, -0.6, 0);
+        HookMath.Catch c = HookMath.catchStep(new V(2, 8, 0), vel, V.ZERO, 9.5);
+        assertFalse(c.taut());
+        assertEquals(vel, c.velocity());
+    }
+
+    @Test
     void headVelocityFromObservedMovement() {
         V air = HookMath.headVelocity(new V(1, 0.5, -1), false);
         assertEquals(0.91, air.x(), EPS);

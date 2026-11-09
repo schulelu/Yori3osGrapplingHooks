@@ -15,8 +15,18 @@ Target: **Paper 26.2** (built against Paper API 26.2 build 135), Java 25.
 | Climb up the rope | hold **W** |
 | Climb down | hold **S** |
 | Jump off with a boost | **Space** (the hook must not be far below you) |
+| Let go, without the boost | **Shift**, in the air |
 
-The keys can be changed in `config.yml`, and the mouse wheel can climb instead (`scroll-to-climb`).
+The keys can be changed in `config.yml`, and the mouse wheel can climb instead (`scroll-to-climb`). While a hook
+is out, the action bar shows the rope length, the range and these keys as you bound them.
+
+- **Throwing past the range**: when the hook reaches the end of its range without hitting anything, the rope
+  catches it and it swings down, grabbing the first surface it lands on, such as a floor or roof just out of
+  reach. If it finds nothing within two seconds, it comes back.
+- **Hanging still**: after half a second of hanging still on a tight rope, the server holds you in place. You
+  don't bob, whatever your ping, and W/S climb smoothly. Other players see you sitting in the rope as in a
+  harness. A/D (or any movement key that isn't a rope control), Space, Shift or getting hit puts you back into
+  the normal swing.
 
 - **Hooks**: copper (range 10), iron (12), gold (17), diamond (21) and netherite (26). They lose durability on
   each hit, can be repaired with their material in an anvil, and take Unbreaking and Mending.
@@ -31,7 +41,8 @@ The keys can be changed in `config.yml`, and the mouse wheel can climb instead (
   - Hook head: ingots plus a nugget (copper, iron, gold), or three diamonds.
   - Hook: hook head, iron chain and stick, diagonally.
   - Netherite: upgrade the diamond hook or the diamond head at a smithing table.
-  - Copper, iron and gold heads smelt back into nuggets.
+  - Copper, iron and gold hooks and heads smelt back into nuggets, also when damaged or enchanted.
+  - Hooks don't burn as furnace fuel, unlike vanilla fishing rods.
 - **Finding hooks**: extra loot in mineshafts, dungeons, temples, ruined portals, bastions, end cities, trial
   chamber barrels, village weaponsmiths and the bonus chest. Toolsmiths may sell enchanted iron (level 3) and
   diamond (level 5) hooks.
@@ -57,10 +68,13 @@ Declining is fine:
   - the "distance on hook" statistic;
   - the "Failed Hook" advancement;
   - the creative tab (use `/yohooks give`);
-  - the config screen (use `config.yml` and `/yohooks reload`);
-  - smelting whole hooks back to nuggets (heads still smelt).
-- **Hanging still** looks like flying to the server's anti-fly check. The plugin forgives that kick while a hook
-  is out and for three seconds after.
+  - the config screen (use `config.yml` and `/yohooks reload`).
+- **Additions** the mod doesn't have: catching the hook at the end of its range, the seat when hanging still,
+  letting go with Shift and the action bar. Each can be switched off in `config.yml` (`range-catch`,
+  `seat-when-still`, `controls.let-go: none`, `action-bar`).
+
+Like the mod, the plugin tells the server's anti-fly check that a player on a rope isn't flying, so hanging still
+never gets anyone kicked.
 
 ## Admin
 
@@ -69,7 +83,8 @@ Declining is fine:
 - `/yohooks reload`.
 - Permission `yohooks.admin` (operators by default).
 - `config.yml` mirrors the mod's settings: climb speed, soft rope, hunger cost, fragile blocks, a block
-  black/whitelist, per-tier range, durability and damage, controls, the resource pack, loot and trades.
+  black/whitelist, per-tier range, durability and damage, controls, the resource pack, loot and trades. It also
+  switches the additions above on and off.
 
 ## Building
 

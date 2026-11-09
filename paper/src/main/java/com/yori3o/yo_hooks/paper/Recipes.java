@@ -65,16 +65,22 @@ final class Recipes {
         add(new SmithingTransformRecipe(key(Tier.NETHERITE.hookId()), items.hook(Tier.NETHERITE), template,
             new RecipeChoice.MaterialChoice(Material.FISHING_ROD), netherite, false));
 
-        // Hook heads melt back into nuggets (the mod also melts whole hooks; see README)
+        // Hook heads and whole hooks melt back into nuggets. A predicate matches any hook of the tier, also a
+        // damaged or enchanted one, which an exact choice would refuse.
         for (Tier t : List.of(Tier.COPPER, Tier.IRON, Tier.GOLD)) {
-            RecipeChoice head = RecipeChoice.exactChoice(items.head(t));
-            FurnaceRecipe smelt = new FurnaceRecipe(key(t.id + "_nugget_from_smelting"), new org.bukkit.inventory.ItemStack(t.nugget), head, 0.1f, 200);
-            smelt.setCategory(CookingBookCategory.MISC);
-            add(smelt);
-            BlastingRecipe blast = new BlastingRecipe(key(t.id + "_nugget_from_blasting"), new org.bukkit.inventory.ItemStack(t.nugget), head, 0.1f, 100);
-            blast.setCategory(CookingBookCategory.MISC);
-            add(blast);
+            melt(t, "", RecipeChoice.exactChoice(items.head(t)));
+            melt(t, "_hook", RecipeChoice.predicateChoice(s -> HookItems.hookTier(s) == t, items.hook(t)));
         }
+    }
+
+    private void melt(Tier t, String suffix, RecipeChoice input) {
+        org.bukkit.inventory.ItemStack nugget = new org.bukkit.inventory.ItemStack(t.nugget);
+        FurnaceRecipe smelt = new FurnaceRecipe(key(t.id + "_nugget_from_smelting" + suffix), nugget, input, 0.1f, 200);
+        smelt.setCategory(CookingBookCategory.MISC);
+        add(smelt);
+        BlastingRecipe blast = new BlastingRecipe(key(t.id + "_nugget_from_blasting" + suffix), nugget, input, 0.1f, 100);
+        blast.setCategory(CookingBookCategory.MISC);
+        add(blast);
     }
 
     void unregister() {

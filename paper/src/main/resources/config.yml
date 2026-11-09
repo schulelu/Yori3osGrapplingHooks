@@ -32,8 +32,21 @@ controls:
   climb-up: forward
   climb-down: backward
   jump-off: jump
+  # Let go of the rope without the jump boost, while in the air (not on the ground). Not in the mod.
+  let-go: sneak
   # Mouse wheel climbs while hooked (up = climb up) and doesn't switch hotbar slots then.
   scroll-to-climb: false
+
+# Additions the mod doesn't have. Set them to false for the mod's exact behaviour.
+# A hook that reaches the end of its range without hitting anything drops on the tight rope and grabs the
+# first surface it swings onto (a floor or roof just out of reach); if it finds none, it is pulled back.
+# false: it breaks, like in the mod.
+range-catch: true
+# Hanging still on a tight rope seats you on an invisible anchor: no bobbing at any ping, smooth climbing.
+# Movement keys, jumping, sneaking or getting hit put you back into normal swinging.
+seat-when-still: true
+# While a hook is out, the action bar shows its distance or the rope length, the range and the controls.
+action-bar: true
 
 # Optional resource pack with the mod's textures and sounds, offered to players when they join.
 # Players who decline see fishing rods and tripwire hooks and hear vanilla sounds.

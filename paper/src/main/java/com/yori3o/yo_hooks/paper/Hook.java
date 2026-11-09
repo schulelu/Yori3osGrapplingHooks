@@ -28,6 +28,10 @@ final class Hook {
     double vy;
     double vz;
 
+    /** The rope reached its end during the flight: heavier, swinging down on it (range catch). */
+    boolean caught;
+    int caughtTicks;
+
     boolean attached;
     double length;
     @Nullable Block anchor;
@@ -36,9 +40,19 @@ final class Hook {
     /** Where the owner was last tick; the difference is the movement the server saw. */
     Location lastPos;
     boolean lastJump;
+    boolean lastLetGo;
     int climbSoundCooldown;
     /** Mouse-wheel climbing: positive ticks climb up, negative climb down. */
     int scrollClimb;
+
+    /** Holds the owner while they hang still; null while they swing. */
+    @Nullable Seat seat;
+    int stillTicks;
+    int seatCooldown;
+
+    /** What the action bar last showed, and when. */
+    @Nullable String hudKey;
+    long hudTick;
 
     Hook(UUID id, UUID owner, Tier tier, int agility, boolean gentleTouch, int maxRange, Rope rope, Location eye, Location ownerPos) {
         this.id = id;

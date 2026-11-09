@@ -38,6 +38,11 @@ Want to add some variety to your parkour or how you move around the world? This 
 | 26.2          |✔️   |
 | 26.3          |✔️   |
 
+## Paper servers
+
+This fork adds a server plugin port for Paper 26.2 in [`paper/`](paper/README.md): no client mod needed. Report
+problems with the port in this fork, not upstream.
+
 ## 🐞 Issues & suggestions
 
 Found a bug or have an idea? [Open an issue](https://github.com/yori3o/Yori3osGrapplingHooks/issues).

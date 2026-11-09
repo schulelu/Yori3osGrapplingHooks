@@ -1,0 +1,39 @@
+name: Paper plugin
+
+on:
+  push:
+    branches: [paper]
+    tags: ['paper-v*']
+  pull_request:
+    branches: [paper]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and test
+        run: sh ./gradlew -p paper build --console=plain  # upstream's gradlew is not executable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yohooks-paper
+          path: |
+            paper/build/libs/*.jar
+            paper/build/pack/*.zip
+      # The jar points players at the pack asset of the release with its own version, so both come from this build
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/paper-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" paper/build/libs/*.jar paper/build/pack/*.zip \
+            --prerelease --title "YoHooks for Paper ${GITHUB_REF_NAME#paper-v}" --notes-file paper/README.md

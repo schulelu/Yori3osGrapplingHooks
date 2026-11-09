@@ -1,0 +1,52 @@
+# YoHooks: Paper port of Yori3o's Grappling Hooks (https://github.com/yori3o/Yori3osGrapplingHooks).
+# Values and defaults follow the mod's own config. Apply changes with /yohooks reload.
+
+# Climbing speed in blocks per tick (the mod's climbSpeed; 0.115 = 2.3 blocks/s). Agility adds 0.041 per level.
+climb-speed: 0.115
+# Spring rope instead of a rigid one, and how stiff that spring is (0.1 - 1).
+soft-hook: false
+stiffness: 0.1
+# The mod's "funny mode": faster hook, higher jumps, range 79, no durability use, no hunger, no fall damage.
+funny-mode: false
+
+# Hunger: casting costs decrease-satiety / 1.5, jumping off / 3, climbing / 75 per tick (0 - 3).
+decrease-satiety: 1.1
+# Hooks break fragile blocks they hit (glass, ice, dripstone, candles, ...) and make unsupported sand and
+# gravel fall. Regions protected by other plugins (WorldGuard, ...) are respected. Gentle Touch prevents it.
+breaking-fragile-blocks: true
+# Blocks the hook can't attach to (or, with whitelist-mode, the only blocks it can attach to).
+blocks-blacklist: []
+whitelist-mode: false
+
+# Per tier: range in blocks (1 - 99), durability (-1 = unbreakable, up to 960), damage when it hits a mob.
+tiers:
+  copper:    {range: 10, durability: 42,  damage: 1}
+  iron:      {range: 12, durability: 72,  damage: 1}
+  gold:      {range: 17, durability: 24,  damage: 1}
+  diamond:   {range: 21, durability: 156, damage: 2}
+  netherite: {range: 26, durability: 384, damage: 2}
+
+# Vanilla keys that control the rope while you hang on it:
+# forward, backward, left, right, jump, sneak, sprint or none. Right-click with the hook retracts it.
+controls:
+  climb-up: forward
+  climb-down: backward
+  jump-off: jump
+  # Mouse wheel climbs while hooked (up = climb up) and doesn't switch hotbar slots then.
+  scroll-to-climb: false
+
+# Optional resource pack with the mod's textures and sounds, offered to players when they join.
+# Players who decline see fishing rods and tripwire hooks and hear vanilla sounds.
+resource-pack:
+  enabled: true
+  # Leave url and sha1 empty to use the pack released together with this plugin version.
+  url: ""
+  sha1: ""
+  prompt: "Grappling hooks: the hooks' own textures and sounds (optional)."
+
+# Grappling hooks in dungeon, mineshaft, temple, bastion, end city, trial chamber and village chests.
+loot: true
+# Toolsmiths sell an enchanted iron hook at level 3 and a diamond hook at level 5.
+trades:
+  enabled: true
+  chance: 0.4

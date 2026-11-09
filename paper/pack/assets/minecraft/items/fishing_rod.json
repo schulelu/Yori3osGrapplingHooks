@@ -1,0 +1,70 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "yo_hooks:copper_grappling_hook",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/copper_grappling_hook"
+        }
+      },
+      {
+        "when": "yo_hooks:iron_grappling_hook",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/iron_grappling_hook"
+        }
+      },
+      {
+        "when": "yo_hooks:gold_grappling_hook",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/gold_grappling_hook"
+        }
+      },
+      {
+        "when": "yo_hooks:diamond_grappling_hook",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/diamond_grappling_hook"
+        }
+      },
+      {
+        "when": "yo_hooks:netherite_grappling_hook",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/netherite_grappling_hook"
+        }
+      },
+      {
+        "when": "yo_hooks:grappling_hook_handle",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/grappling_hook_handle"
+        }
+      },
+      {
+        "when": "yo_hooks:grappling_hook_handle_netherite",
+        "model": {
+          "type": "minecraft:model",
+          "model": "yo_hooks:item/grappling_hook_handle_netherite"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:condition",
+      "property": "minecraft:fishing_rod/cast",
+      "on_false": {
+        "type": "minecraft:model",
+        "model": "minecraft:item/fishing_rod"
+      },
+      "on_true": {
+        "type": "minecraft:model",
+        "model": "minecraft:item/fishing_rod_cast"
+      }
+    }
+  }
+}

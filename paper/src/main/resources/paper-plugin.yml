@@ -1,0 +1,12 @@
+name: YoHooks
+version: '${version}'
+main: com.yori3o.yo_hooks.paper.YoHooks
+bootstrapper: com.yori3o.yo_hooks.paper.YoHooksBootstrap
+api-version: '${minecraft}'
+description: Grappling hooks for Paper, a port of Yori3o's Grappling Hooks
+authors: [yori3o, schulelu]
+website: https://github.com/schulelu/Yori3osGrapplingHooks
+permissions:
+  yohooks.admin:
+    description: /yohooks give and /yohooks reload
+    default: op
